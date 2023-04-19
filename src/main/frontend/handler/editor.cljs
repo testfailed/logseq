@@ -2680,43 +2680,54 @@
 (defn- delete-concat
   [current-block input current-pos value]
   (let [input-id (state/get-edit-input-id)
-        right (outliner-core/get-right-node (outliner-core/block current-block))
+        right (outliner-core/get-right-sibling (:db/id current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
         first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
-                     (:data right)
+                     right
                      first-child)]
     (cond
-      (and collapsed? right (db/has-children? (tree/-get-id right)))
+      (and collapsed? right (db/has-children? (:block/uuid right)))
       nil
 
       (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
-      (and next-block (block-has-no-ref? (:db/id current-block)))
-      (let [edit-block (state/get-edit-block)
+      (and next-block
+           (block-has-no-ref? (:db/id current-block))
+           (not (block-has-no-ref? (:db/id next-block))))
+      (let [repo (state/get-current-repo)
+            edit-block (state/get-edit-block)
             new-content (str value (:block/content next-block))
-            additional-tx (filter some?
-                                  (conj [{:db/id (:db/id next-block)
-                                                :block/left (:block/left current-block)
-                                                :block/parent (:block/parent current-block)}]
-                                              (when (some-> right :data (not= next-block))
-                                                {:db/id (:db/id (:data right))
-                                                 :block/left (:db/id next-block)})
-                                              (when collapsed?
-                                                {:db/id (:db/id first-child)
-                                                 :block/left (:db/id next-block)
-                                                 :block/parent (:db/id next-block)})))
+            additional-tx (->> (concat
+                                [[:db/retractEntity (:db/id current-block)]
+                                 {:db/id (:db/id next-block)
+                                  :block/left (:block/left current-block)
+                                  :block/parent (:block/parent current-block)}
+                                 (when (not= (:db/id right) (:db/id next-block))
+                                   {:db/id (:db/id right)
+                                    :block/left (:db/id next-block)})]
+                                (when (and current-block-has-children? (not collapsed?))
+                                  (let [children (->> (db-model/get-block-immediate-children repo (:block/uuid current-block))
+                                                      (map :db/id))]
+                                    (map-indexed (fn [idx id]
+                                                   (cond->
+                                                     {:db/id id
+                                                      :block/parent (:db/id next-block)}
+                                                     (zero? idx)
+                                                     (assoc :block/left (:db/id next-block))))
+                                                 (remove #{(:db/id next-block)} children)))))
+                               (remove nil?))
             transact-opts {:outliner-op :delete-block
                            :concat-data {:last-edit-block (:block/uuid edit-block)
                                          :end? true}
                            :additional-tx additional-tx}
             repo (state/get-current-repo)]
         (outliner-tx/transact! transact-opts
-          (delete-block-aux! edit-block false)
           (save-block! repo next-block new-content))
-        (edit-block! next-block current-pos (:block/uuid next-block)))
+        (edit-block! next-block current-pos (:block/uuid next-block)
+                     {:custom-content new-content}))
 
       :else
       (let [edit-block (state/get-edit-block)
