@@ -319,7 +319,7 @@
                      blocks' (map (fn [b]
                                     (let [b' (if (seq (:block/properties b))
                                                (update b :block/content
-                                                       (fn [content] (property/remove-properties (:block/format b) content)))
+                                                       (fn [content] (gp-property/remove-properties (:block/format b) content)))
                                                b)]
                                       (safe-keywordize b'))) blocks)
                      children (outliner-tree/blocks->vec-tree blocks' name)

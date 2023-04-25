@@ -41,12 +41,6 @@
                     "")
     content))
 
-(defn simplified-property?
-  [line]
-  (boolean
-   (and (string? line)
-        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons)) line))))
-
 (defn front-matter-property?
   [line]
   (boolean
@@ -123,46 +117,6 @@
   (let [from (cursor/pos input)]
     (cursor/move-cursor-to-thing input properties-end from)))
 
-(defn remove-properties
-  [format content]
-  (cond
-    (gp-property/contains-properties? content)
-    (let [lines (string/split-lines content)
-          [title-lines properties&body] (split-with #(-> (string/triml %)
-                                                         string/upper-case
-                                                         (string/starts-with? properties-start)
-                                                         not)
-                                                    lines)
-          body (drop-while #(-> (string/trim %)
-                                string/upper-case
-                                (string/starts-with? properties-end)
-                                not
-                                (or (string/blank? %)))
-                           properties&body)
-          body (if (and (seq body)
-                        (-> (first body)
-                            string/triml
-                            string/upper-case
-                            (string/starts-with? properties-end)))
-                 (let [line (string/replace (first body) #"(?i):END:\s?" "")]
-                   (if (string/blank? line)
-                     (rest body)
-                     (cons line (rest body))))
-                 body)]
-      (->> (concat title-lines body)
-           (string/join "\n")))
-
-    (not= format :org)
-    (let [lines (string/split-lines content)
-          lines (if (simplified-property? (first lines))
-                  (drop-while simplified-property? lines)
-                  (cons (first lines)
-                        (drop-while simplified-property? (rest lines))))]
-      (string/join "\n" lines))
-
-    :else
-    content))
-
 (defn build-properties-str
   [format properties]
   (when (seq properties)
@@ -185,14 +139,14 @@
                            [(first lines) (rest lines)]
                            [nil lines])
             properties-in-content? (and title (= (string/upper-case title) properties-start))
-            no-title? (or (simplified-property? title) properties-in-content?)
+            no-title? (or (gp-property/simplified-property? title) properties-in-content?)
             properties&body (concat
                                  (when (and no-title? (not org?)) [title])
                                  (if (and org? properties-in-content?)
                                    (rest body)
                                    body))
             {properties-lines true body false} (group-by (fn [s]
-                                                           (or (simplified-property? s)
+                                                           (or (gp-property/simplified-property? s)
                                                                (and org? (org-property? s)))) properties&body)
             body (if org?
                    (remove (fn [s] (contains? #{properties-start properties-end} (string/trim s))) body)
@@ -280,7 +234,7 @@
                     (let [exists? (atom false)
                           sym (if front-matter? ": " (str gp-property/colons " "))
                           new-property-s (str key sym value)
-                          property-f (if front-matter? front-matter-property? simplified-property?)
+                          property-f (if front-matter? front-matter-property? gp-property/simplified-property?)
                           groups (partition-by property-f lines)
                           compose-lines (fn []
                                           (mapcat (fn [lines]

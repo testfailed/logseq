@@ -7,11 +7,11 @@
             [goog.string.format]))
 
 (def colons "Property delimiter for markdown mode" "::")
-(defn colons-org 
+(defn colons-org
   "Property delimiter for org mode"
   [property]
   (str ":" property ":"))
- 
+
 (defn ->block-content
   "Creates a block content string from properties map"
   [properties]
@@ -146,4 +146,50 @@
               lines (concat before middle after)]
           (string/join "\n" lines))
         content))
+    content))
+
+(defn simplified-property?
+  [line]
+  (boolean
+   (and (string? line)
+        (re-find (re-pattern (str "^\\s?[^ ]+" colons)) line))))
+
+(defn remove-properties
+  [format content]
+  (cond
+    (contains-properties? content)
+    (let [lines (string/split-lines content)
+          [title-lines properties&body] (split-with #(-> (string/triml %)
+                                                         string/upper-case
+                                                         (string/starts-with? properties-start)
+                                                         not)
+                                                    lines)
+          body (drop-while #(-> (string/trim %)
+                                string/upper-case
+                                (string/starts-with? properties-end)
+                                not
+                                (or (string/blank? %)))
+                           properties&body)
+          body (if (and (seq body)
+                        (-> (first body)
+                            string/triml
+                            string/upper-case
+                            (string/starts-with? properties-end)))
+                 (let [line (string/replace (first body) #"(?i):END:\s?" "")]
+                   (if (string/blank? line)
+                     (rest body)
+                     (cons line (rest body))))
+                 body)]
+      (->> (concat title-lines body)
+           (string/join "\n")))
+
+    (not= format :org)
+    (let [lines (string/split-lines content)
+          lines (if (simplified-property? (first lines))
+                  (drop-while simplified-property? lines)
+                  (cons (first lines)
+                        (drop-while simplified-property? (rest lines))))]
+      (string/join "\n" lines))
+
+    :else
     content))

@@ -17,22 +17,9 @@
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
-(defn- content-with-collapsed-state
-  "Only accept nake content (without any indentation)"
-  [format content collapsed?]
-  (cond
-    collapsed?
-    (property/insert-property format content :collapsed true)
-
-    ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
-    (false? collapsed?)
-    (property/remove-property format :collapsed content)
-
-    :else
-    content))
-
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content left page parent properties]} level {:keys [heading-to-list?]}]
+  [{:block/keys [collapsed? format pre-block? unordered content left page
+                 parent properties properties-order properties-text-values]} level {:keys [heading-to-list?]}]
   (let [heading (:heading properties)
         markdown? (= :markdown format)
         content (or content "")
@@ -74,15 +61,19 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
-                        content (content-with-collapsed-state format content collapsed?)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
                               ""
                               " ")]
-                    (str prefix sep new-content)))]
-    content))
-
+                    (str prefix sep new-content)))
+        content-with-properties (if (seq properties)
+                                  (let [property-kvs (for [property properties-order]
+                                                       [property (get properties-text-values property)])]
+                                    (property/insert-properties format content property-kvs))
+                                  content)]
+    (prn {:content-with-properties content-with-properties})
+    content-with-properties))
 
 (defn- tree->file-content-aux
   [tree {:keys [init-level] :as opts}]

@@ -903,7 +903,7 @@
                                      (filter (set (keys properties)))
                                      distinct
                                      vec)
-                    content (property/remove-properties format content)
+                    content (gp-property/remove-properties format content)
                     kvs (for [key property-ks] [key (or (get properties-text-values key)
                                                         (get properties key))])
                     content (property/insert-properties format content kvs)
@@ -1383,7 +1383,7 @@
   [format content]
   (->> (text/remove-level-spaces content format (config/get-block-pattern format))
        (drawer/remove-logbook)
-       (property/remove-properties format)
+       (gp-property/remove-properties format)
        string/trim))
 
 (defn insert-command!
@@ -3660,7 +3660,7 @@
     (when-let [block (db/pull [:block/uuid link])]
       (let [block-content (:block/content block)
             format (or (:block/format block) :markdown)
-            block-content-without-prop (-> (property/remove-properties format block-content)
+            block-content-without-prop (-> (gp-property/remove-properties format block-content)
                                            (drawer/remove-logbook))]
         (when-let [input (state/get-input)]
           (when-let [current-block-content (gobj/get input "value")]
