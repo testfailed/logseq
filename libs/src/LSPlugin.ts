@@ -332,7 +332,7 @@ export interface IPluginTextEncoderServiceHooks {
   name: string
   options?: Record<string, any>
 
-  textEncode: (text: string) => Promise<string>
+  textEncode: (text: string) => Promise<Float32Array>
 }
 
 /**
